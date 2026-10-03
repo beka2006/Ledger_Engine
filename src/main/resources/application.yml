@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ledger-engine
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ledger_engine}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      # "update" is convenient while the schema is still taking shape in
+      # early commits. Once the schema stabilizes (around Phase 3), this
+      # should switch to a real migration tool (Flyway) — noted here so it
+      # isn't forgotten.
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
