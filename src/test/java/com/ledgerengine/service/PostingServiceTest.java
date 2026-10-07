@@ -1,6 +1,7 @@
 package com.ledgerengine.service;
 
 import com.ledgerengine.exception.AccountNotFoundException;
+import com.ledgerengine.exception.InsufficientFundsException;
 import com.ledgerengine.exception.UnbalancedTransactionException;
 import com.ledgerengine.model.Account;
 import com.ledgerengine.model.EntryType;
@@ -32,6 +33,9 @@ class PostingServiceTest {
     @Mock
     private TransactionRepository transactionRepository;
 
+    @Mock
+    private BalanceService balanceService;
+
     private PostingService postingService;
 
     private UUID sourceAccountId;
@@ -41,7 +45,7 @@ class PostingServiceTest {
 
     @BeforeEach
     void setUp() {
-        postingService = new PostingService(accountRepository, transactionRepository);
+        postingService = new PostingService(accountRepository, transactionRepository, balanceService);
 
         sourceAccountId = UUID.randomUUID();
         destinationAccountId = UUID.randomUUID();
@@ -50,9 +54,10 @@ class PostingServiceTest {
     }
 
     @Test
-    void postsATransactionWhenDebitsAndCreditsAreBalanced() {
+    void postsATransactionWhenDebitsAndCreditsAreBalancedAndFundsAreSufficient() {
         when(accountRepository.findById(sourceAccountId)).thenReturn(Optional.of(sourceAccount));
         when(accountRepository.findById(destinationAccountId)).thenReturn(Optional.of(destinationAccount));
+        when(balanceService.getBalance(sourceAccountId)).thenReturn(new BigDecimal("200.00"));
         when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         List<EntryRequest> entries = List.of(
@@ -65,6 +70,7 @@ class PostingServiceTest {
         assertThat(result.getEntries()).hasSize(2);
         assertThat(result.getDescription()).isEqualTo("Transfer");
         verify(transactionRepository, times(1)).save(any(Transaction.class));
+        verify(accountRepository, times(1)).flush();
     }
 
     @Test
@@ -79,11 +85,11 @@ class PostingServiceTest {
                 .hasMessageContaining("50.00")
                 .hasMessageContaining("40.00");
 
-        // The balance check must happen before any database interaction -
-        // these verifications prove the method fails fast, not after a
-        // partial write.
+        // The balance check must happen before any database or balance-service
+        // interaction — proves the method fails fast, not after a partial write.
         verifyNoInteractions(accountRepository);
         verifyNoInteractions(transactionRepository);
+        verifyNoInteractions(balanceService);
     }
 
     @Test
@@ -102,13 +108,30 @@ class PostingServiceTest {
     }
 
     @Test
-    void acceptsAThreeWaySplitAsLongAsTotalsMatch() {
+    void rejectsAWithdrawalThatWouldOverdrawTheAccount() {
+        when(accountRepository.findById(sourceAccountId)).thenReturn(Optional.of(sourceAccount));
+        when(balanceService.getBalance(sourceAccountId)).thenReturn(new BigDecimal("30.00"));
+
+        List<EntryRequest> entries = List.of(
+                new EntryRequest(sourceAccountId, EntryType.CREDIT, new BigDecimal("50.00")),
+                new EntryRequest(destinationAccountId, EntryType.DEBIT, new BigDecimal("50.00"))
+        );
+
+        assertThatThrownBy(() -> postingService.postTransaction("Overdraft attempt", entries))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    void acceptsAThreeWaySplitAsLongAsTotalsMatchAndFundsAreSufficient() {
         UUID thirdAccountId = UUID.randomUUID();
         Account thirdAccount = new Account("Carol", "EUR");
 
         when(accountRepository.findById(sourceAccountId)).thenReturn(Optional.of(sourceAccount));
         when(accountRepository.findById(destinationAccountId)).thenReturn(Optional.of(destinationAccount));
         when(accountRepository.findById(thirdAccountId)).thenReturn(Optional.of(thirdAccount));
+        when(balanceService.getBalance(sourceAccountId)).thenReturn(new BigDecimal("500.00"));
         when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         List<EntryRequest> entries = List.of(

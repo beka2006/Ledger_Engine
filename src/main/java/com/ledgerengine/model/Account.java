@@ -10,15 +10,20 @@ import java.util.UUID;
  * clearing account).
  * <p>
  * Deliberately has NO "balance" column. In a double-entry system, the
- * balance is never stored directly -- it's always derived by summing this
+ * balance is never stored directly — it's always derived by summing this
  * account's LedgerEntry rows (credits minus debits, or vice versa depending
  * on account type). Storing a balance field alongside the entries would let
  * the two drift out of sync (e.g. if a bug updates one but not the other);
  * computing it on demand makes that entire class of bug impossible.
  * <p>
- * A {@code long version} field is already here, unused for now - it's a
- * placeholder for the optimistic-locking commit later in the project, kept
- * visible from the start since it affects how this entity is shaped.
+ * The {@code version} field is what makes optimistic locking work: every
+ * UPDATE to this row increments it, and Hibernate adds "AND version = ?" to
+ * that UPDATE's WHERE clause behind the scenes. If two transactions read the
+ * same Account (same version) and both try to commit a change, the second
+ * one's UPDATE matches zero rows (the version has already moved on) and
+ * Hibernate throws instead of silently overwriting the first transaction's
+ * work. See {@link #recordActivity()} for why posting a transaction needs to
+ * actually change something on Account to make this trigger at all.
  */
 @Entity
 @Table(name = "accounts")
@@ -37,6 +42,8 @@ public class Account {
     @Column(nullable = false)
     private Instant createdAt;
 
+    private Instant lastActivityAt;
+
     @Version
     private long version;
 
@@ -48,6 +55,21 @@ public class Account {
         this.ownerName = ownerName;
         this.currency = currency;
         this.createdAt = Instant.now();
+    }
+
+    /**
+     * Called once per account touched by a posting. On its own this is a
+     * reasonable thing to track (an audit trail of "when did this account
+     * last see activity"), but it also has a second job: LedgerEntry rows
+     * reference an Account without ever modifying it, so without some real
+     * field changing here, posting two entries to the same Account would
+     * never actually produce an UPDATE on the accounts table — and with no
+     * UPDATE, {@code version} never gets checked, and optimistic locking has
+     * nothing to catch. This method is what turns "post a transaction" into
+     * "also update the account row," which is what the @Version check needs.
+     */
+    public void recordActivity() {
+        this.lastActivityAt = Instant.now();
     }
 
     public UUID getId() {
@@ -64,6 +86,10 @@ public class Account {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getLastActivityAt() {
+        return lastActivityAt;
     }
 
     public long getVersion() {
