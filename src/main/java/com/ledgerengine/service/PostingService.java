@@ -87,9 +87,30 @@ public class PostingService {
 
     @Transactional
     public Transaction postTransaction(String description, List<EntryRequest> entryRequests) {
+        return postTransaction(description, entryRequests, null, null);
+    }
+
+    /**
+     * Same as the two-argument version, but also stamps the transaction with
+     * an idempotency key and a fingerprint of the request. This method does
+     * NOT check whether the key was used before; that check lives in
+     * IdempotentPostingService, which must run OUTSIDE any database
+     * transaction (see the comment there). Here the key is simply stored, and
+     * the unique constraint on that column is the last line of defence if two
+     * requests with the same key slip through the check at the same time.
+     */
+    @Transactional
+    public Transaction postTransaction(String description,
+                                        List<EntryRequest> entryRequests,
+                                        String idempotencyKey,
+                                        String requestFingerprint) {
         validateBalanced(entryRequests);
 
         Transaction transaction = new Transaction(description);
+        if (idempotencyKey != null) {
+            transaction.setIdempotencyKey(idempotencyKey);
+            transaction.setRequestFingerprint(requestFingerprint);
+        }
         Map<UUID, Account> touchedAccounts = new LinkedHashMap<>();
 
         for (EntryRequest request : entryRequests) {
