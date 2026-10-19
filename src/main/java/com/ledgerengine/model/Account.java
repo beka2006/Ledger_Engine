@@ -10,7 +10,7 @@ import java.util.UUID;
  * clearing account).
  * <p>
  * Deliberately has NO "balance" column. In a double-entry system, the
- * balance is never stored directly — it's always derived by summing this
+ * balance is never stored directly - it's always derived by summing this
  * account's LedgerEntry rows (credits minus debits, or vice versa depending
  * on account type). Storing a balance field alongside the entries would let
  * the two drift out of sync (e.g. if a bug updates one but not the other);
@@ -40,6 +40,9 @@ public class Account {
     private String currency;
 
     @Column(nullable = false)
+    private boolean overdraftAllowed;
+
+    @Column(nullable = false)
     private Instant createdAt;
 
     private Instant lastActivityAt;
@@ -52,8 +55,22 @@ public class Account {
     }
 
     public Account(String ownerName, String currency) {
+        this(ownerName, currency, false);
+    }
+
+    /**
+     * @param overdraftAllowed true for accounts that are SUPPOSED to be able to
+     *        go negative, such as an "external funding" account that represents
+     *        the outside world. Customer accounts leave this false, so
+     *        PostingService refuses any posting that would overdraw them.
+     *        Without such an account there would be no way to get money into
+     *        the system at all: every account would need a balance before it
+     *        could pay anything out.
+     */
+    public Account(String ownerName, String currency, boolean overdraftAllowed) {
         this.ownerName = ownerName;
         this.currency = currency;
+        this.overdraftAllowed = overdraftAllowed;
         this.createdAt = Instant.now();
     }
 
@@ -63,7 +80,7 @@ public class Account {
      * last see activity"), but it also has a second job: LedgerEntry rows
      * reference an Account without ever modifying it, so without some real
      * field changing here, posting two entries to the same Account would
-     * never actually produce an UPDATE on the accounts table — and with no
+     * never actually produce an UPDATE on the accounts table - and with no
      * UPDATE, {@code version} never gets checked, and optimistic locking has
      * nothing to catch. This method is what turns "post a transaction" into
      * "also update the account row," which is what the @Version check needs.
@@ -82,6 +99,10 @@ public class Account {
 
     public String getCurrency() {
         return currency;
+    }
+
+    public boolean isOverdraftAllowed() {
+        return overdraftAllowed;
     }
 
     public Instant getCreatedAt() {

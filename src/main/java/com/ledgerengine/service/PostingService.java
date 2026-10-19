@@ -116,7 +116,7 @@ public class PostingService {
         for (EntryRequest request : entryRequests) {
             Account account = touchedAccounts.computeIfAbsent(request.accountId(), this::loadAccount);
 
-            if (request.type() == EntryType.CREDIT) {
+            if (request.type() == EntryType.CREDIT && !account.isOverdraftAllowed()) {
                 checkSufficientFunds(request.accountId(), request.amount());
             }
 

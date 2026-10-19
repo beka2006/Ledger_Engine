@@ -144,4 +144,24 @@ class PostingServiceTest {
 
         assertThat(result.getEntries()).hasSize(3);
     }
+
+    @Test
+    void anAccountThatAllowsOverdraftCanPayOutWithoutABalanceCheck() {
+        Account fundingAccount = new Account("External funding", "EUR", true);
+
+        when(accountRepository.findById(sourceAccountId)).thenReturn(Optional.of(fundingAccount));
+        when(accountRepository.findById(destinationAccountId)).thenReturn(Optional.of(destinationAccount));
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<EntryRequest> entries = List.of(
+                new EntryRequest(sourceAccountId, EntryType.CREDIT, new BigDecimal("500.00")),
+                new EntryRequest(destinationAccountId, EntryType.DEBIT, new BigDecimal("500.00"))
+        );
+
+        Transaction result = postingService.postTransaction("Funding", entries);
+
+        assertThat(result.getEntries()).hasSize(2);
+        // The balance of an overdraft-allowed account is never even looked up.
+        verifyNoInteractions(balanceService);
+    }
 }

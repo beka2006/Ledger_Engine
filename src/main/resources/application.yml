@@ -16,6 +16,7 @@ spring:
       # isn't forgotten.
       ddl-auto: update
     show-sql: true
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
