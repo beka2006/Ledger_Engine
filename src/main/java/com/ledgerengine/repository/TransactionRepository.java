@@ -14,12 +14,16 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
      * retried request can be answered with the original result instead of
      * posting a duplicate.
      * <p>
-     * {@code @EntityGraph} loads the entries together with the transaction in
-     * one query. Without it, the entries collection is lazy, and a caller
-     * that gets this transaction back outside of a database session (such as
-     * a REST controller building a response) would hit a
-     * LazyInitializationException the first time it touched them.
+     * {@code @EntityGraph} loads the entries, and the account each entry points
+     * at, together with the transaction in one query. Both are lazy by default,
+     * and a caller that gets this transaction back outside of a database
+     * session (such as the REST layer building a response) would otherwise hit
+     * a LazyInitializationException the first time it touched them.
      */
-    @EntityGraph(attributePaths = {"entries"})
+    @EntityGraph(attributePaths = {"entries", "entries.account"})
     Optional<Transaction> findByIdempotencyKey(String idempotencyKey);
+
+    /** Same eager loading as above, for looking a transaction up by its id. */
+    @EntityGraph(attributePaths = {"entries", "entries.account"})
+    Optional<Transaction> findWithEntriesById(UUID id);
 }

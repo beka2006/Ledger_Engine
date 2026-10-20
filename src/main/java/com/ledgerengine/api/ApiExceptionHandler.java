@@ -4,6 +4,7 @@ import com.ledgerengine.exception.AccountNotFoundException;
 import com.ledgerengine.exception.ConcurrentPostingException;
 import com.ledgerengine.exception.IdempotencyKeyReuseException;
 import com.ledgerengine.exception.InsufficientFundsException;
+import com.ledgerengine.exception.TransactionNotFoundException;
 import com.ledgerengine.exception.UnbalancedTransactionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,7 +29,7 @@ import java.util.Map;
  *   <li><b>400 Bad Request</b>: the request itself is malformed (bad JSON, a
  *       field failing validation, an id that isn't a UUID). Nothing about the
  *       ledger's state could have made it valid.</li>
- *   <li><b>404 Not Found</b>: the referenced account doesn't exist.</li>
+ *   <li><b>404 Not Found</b>: the referenced account or transaction doesn't exist.</li>
  *   <li><b>422 Unprocessable Entity</b>: the request is well-formed but the
  *       ledger refuses it on business grounds (unbalanced, insufficient funds,
  *       idempotency key reused for a different request). Retrying the same
@@ -43,8 +44,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler(AccountNotFoundException.class)
-    public ResponseEntity<ApiError> handleNotFound(AccountNotFoundException e) {
+    @ExceptionHandler({AccountNotFoundException.class, TransactionNotFoundException.class})
+    public ResponseEntity<ApiError> handleNotFound(RuntimeException e) {
         return respond(HttpStatus.NOT_FOUND, e.getMessage());
     }
 
